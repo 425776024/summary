@@ -25,7 +25,7 @@ save_path=os.path.join(res_dir, 'result.csv')
 # 隐藏层
 hidden_dim = 256
 emb_dim = 128
-batch_size = 128
+batch_size = 64
 # 最大编码长度
 max_enc_steps = 400
 # 最大解码长度
@@ -53,7 +53,7 @@ max_iterations = 5000
 
 # 使用GPU相关
 use_gpu = True
-GPU = "cuda:2"
+GPU = "cuda:0"
 USE_CUDA = use_gpu and torch.cuda.is_available()  # 是否使用GPU
 NUM_CUDA = torch.cuda.device_count()
 DEVICE = torch.device(GPU if USE_CUDA else 'cpu')
