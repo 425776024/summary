@@ -1,6 +1,7 @@
 ## 数据
 
-train/test.csv数据放进去
+train/test.csv数据放进data
+
 ![](img/image-20191225231013617.png)
 
 
