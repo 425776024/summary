@@ -1,10 +1,8 @@
 ## 数据
 
-数据放进去
+数据AutoMaster\**.csv放进data/
 
-![](img/image-20191225231013617.png)
-
-
+predict.sh时指定src/config.py下model_path的路径
 
 ## 运行
 
