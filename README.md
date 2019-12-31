@@ -1,6 +1,12 @@
-# 问答摘要与推理
+## 数据
 
-## RUN
+数据放进去
+
+![](img/image-20191225231013617.png)
+
+
+
+## 运行
 
 >1:sh start.sh
 
@@ -8,10 +14,11 @@
 
 >3:sh predict.sh
 
-## category
+## 目录
 
->data:data
+>data:数据目录
 
->logs:train model saved path
+>logs:模型保存目录
 
->result:out predict path
+>result:输出结果目录
+
