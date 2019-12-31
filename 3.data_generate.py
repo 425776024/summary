@@ -2,10 +2,9 @@ import os
 import struct
 import collections
 from tensorflow.core.example import example_pb2
-
+from src import config
 
 def chunk_file(finished_files_dir, chunks_dir, name, chunk_size):
-    """构建二进制文件"""
     in_file = os.path.join(finished_files_dir, '%s.bin' % name)
     print(in_file)
     reader = open(in_file, "rb")
@@ -47,7 +46,7 @@ def read_text_file(text_file):
 
 
 def write_to_bin(input_file, out_file, makevocab=False):
-    """生成模型需要的文件"""
+    # 生成bin模型
     if makevocab:
         vocab_counter = collections.Counter()
 
@@ -58,9 +57,10 @@ def write_to_bin(input_file, out_file, makevocab=False):
             if i % 2 == 0:
                 article = lines[i]
             if i % 2 != 0:
+                # 构造<s> txt </s>
                 abstract = "%s %s %s" % (SENTENCE_START, lines[i], SENTENCE_END)
 
-                # 写入tf.Example
+                # tf.Example序列化
                 tf_example = example_pb2.Example()
                 tf_example.features.feature['article'].bytes_list.value.extend([bytes(article, encoding='utf-8')])
                 tf_example.features.feature['abstract'].bytes_list.value.extend([bytes(abstract, encoding='utf-8')])
@@ -82,7 +82,7 @@ def write_to_bin(input_file, out_file, makevocab=False):
 
     print("Finished writing file %s\n" % out_file)
 
-    # 将词典写入文件
+    # 将词典写入文件，词 词频
     if makevocab:
         print("Writing vocab file...")
         with open(os.path.join(FINISHED_FILE_DIR, "vocab"), 'w', encoding='utf-8') as writer:
@@ -91,24 +91,24 @@ def write_to_bin(input_file, out_file, makevocab=False):
         print("Finished writing vocab file")
 
 
-FINISHED_FILE_DIR='data/'
-TRAIN_FILE = FINISHED_FILE_DIR+"train_art_summ_prep.txt"
-VAL_FILE = FINISHED_FILE_DIR+"val_art_summ_prep.txt"
-
+FINISHED_FILE_DIR = 'data/'
+TRAIN_FILE = FINISHED_FILE_DIR + "train_art_summ_prep.txt"
+VAL_FILE = FINISHED_FILE_DIR + "val_art_summ_prep.txt"
 
 SENTENCE_START = '<s>'
 SENTENCE_END = '</s>'
 
-VOCAB_SIZE = 50000  # 词汇表大小
-CHUNK_SIZE = 1000  # 每个分块example的数量，用于分块的数据
+# 词汇表大小
+VOCAB_SIZE = config.vocab_size
+# 每个分块example的数量，用于分块的数据
+CHUNK_SIZE = 1000
 
 # tf模型数据文件存放目录
 CHUNKS_DIR = os.path.join(FINISHED_FILE_DIR, 'chunked')
 
-
 if not os.path.exists(FINISHED_FILE_DIR):
     os.makedirs(FINISHED_FILE_DIR)
-    
+
 write_to_bin(VAL_FILE, os.path.join(FINISHED_FILE_DIR, "val.bin"))
 write_to_bin(TRAIN_FILE, os.path.join(FINISHED_FILE_DIR, "train.bin"), makevocab=True)
 chunk_all()

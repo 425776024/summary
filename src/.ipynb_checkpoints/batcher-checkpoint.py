@@ -6,6 +6,8 @@ sys.path.append(base_dir)
 import random
 import torch
 import numpy as np
+from random import shuffle
+from queue import Queue
 from torch.autograd import Variable
 
 import data

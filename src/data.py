@@ -1,52 +1,41 @@
-import os,sys
+import os, sys
+
 base_dir = os.path.abspath(os.path.dirname(__file__))
-print(base_dir)
 sys.path.append(base_dir)
 
 import glob
 import random
 import struct
-import csv
 from tensorflow.core.example import example_pb2
 
-# <s> and </s> are used in the data files to segment the abstracts into sentences. They don't receive vocab ids.
 SENTENCE_START = '<s>'
 SENTENCE_END = '</s>'
 
-PAD_TOKEN = '[PAD]'  # This has a vocab id, which is used to pad the encoder input, decoder input and target sequence
-UNKNOWN_TOKEN = '[UNK]'  # This has a vocab id, which is used to represent out-of-vocabulary words
-START_DECODING = '[START]'  # This has a vocab id, which is used at the start of every decoder input sequence
-STOP_DECODING = '[STOP]'  # This has a vocab id, which is used at the end of untruncated target sequences
+PAD_TOKEN = '[PAD]'
+UNKNOWN_TOKEN = '[UNK]'
+START_DECODING = '[START]'
+STOP_DECODING = '[STOP]'
 
 
-# Note: none of <s>, </s>, [PAD], [UNK], [START], [STOP] should appear in the vocab file.
+# 不出现在词汇表中：<s>, </s>, [PAD], [UNK], [START], [STOP]
 
 
 class Vocab(object):
-    """
-    vocab_file content(word count):
-            to 5751035
-            a 5100555
-            and 4892247
-    """
 
     def __init__(self, vocab_file, max_size):
         self._word_to_id = {}
         self._id_to_word = {}
-        self._count = 0  # keeps track of total number of words in the Vocab
+        self._count = 0
 
-        # [UNK], [PAD], [START] and [STOP] get the ids 0,1,2,3.
         for w in [UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
             self._word_to_id[w] = self._count
             self._id_to_word[self._count] = w
             self._count += 1
 
-        # Read the vocab file and add words up to max_size
         with open(vocab_file, 'r') as vocab_f:
             for line in vocab_f:
                 pieces = line.split()
                 if len(pieces) != 2:
-                    print('Warning: incorrectly formatted line in vocabulary file: {}'.format(line))
                     continue
                 w = pieces[0]
                 if w in [SENTENCE_START, SENTENCE_END, UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
@@ -58,75 +47,61 @@ class Vocab(object):
                 self._id_to_word[self._count] = w
                 self._count += 1
                 if max_size != 0 and self._count >= max_size:
-                    print("max_size of vocab was specified as {}; we now have {} words. Stopping reading.".format(
-                        max_size, self._count))
                     break
-        print("Finished constructing vocabulary of {} total words. Last word added: {}".format(self._count,
-                                                                                               self._id_to_word[
-                                                                                                   self._count - 1]))
 
     def word2id(self, word):
-        """获取单个词语的id"""
         if word not in self._word_to_id:
             return self._word_to_id[UNKNOWN_TOKEN]
         return self._word_to_id[word]
 
     def id2word(self, word_id):
-        """根据id解析出对应的词语"""
         if word_id not in self._id_to_word:
             raise ValueError('Id not found in vocab: %d' % word_id)
         return self._id_to_word[word_id]
 
     def size(self):
-        """获取加上特殊符号后的词汇表数量"""
         return self._count
 
-    def write_metadata(self, fpath):
-        print("Writing word embedding metadata file to {}...", format(fpath))
-        with open(fpath, "w") as f:
-            fieldnames = ['word']
-            writer = csv.DictWriter(f, delimiter="\t", fieldnames=fieldnames)
-        for i in range(self.size()):
-            writer.writerow({"word": self._id_to_word[i]})
 
-
-def example_generator(data_path, single_pass):
-    """读取目录下的文件，返回example_pb2.Example"""
+def text_generator(data_path):
     while True:
-        filelist = glob.glob(data_path)  # get the list of datafiles
-        assert filelist, ('Error: Empty filelist at %s' % data_path)  # check filelist isn't empty
-        if single_pass:
-            filelist = sorted(filelist)
-        else:
-            random.shuffle(filelist)
+        # 文件路径集合
+        filelist = glob.glob(data_path)
+        assert filelist, ('Error: Empty filelist at %s' % data_path)
+        random.shuffle(filelist)
         for f in filelist:
             reader = open(f, 'rb')
+            temp_tuple_txt = []
             while True:
                 len_bytes = reader.read(8)
                 if not len_bytes:
-                    break  # finished reading this file
+                    break
                 str_len = struct.unpack('q', len_bytes)[0]
                 example_str = struct.unpack('%ds' % str_len, reader.read(str_len))[0]
-                t = example_pb2.Example.FromString(example_str)
+                e = example_pb2.Example.FromString(example_str)
+                article = e.features.feature['article'].bytes_list.value[0]
+                abstract = e.features.feature['abstract'].bytes_list.value[0]
+                article, abstract = article.decode(), abstract.decode()
+                temp_tuple_txt.append((article, abstract))
+            for t in temp_tuple_txt:
                 yield t
-        if single_pass:
-            print("example_generator completed reading all datafiles. No more data.")
-            break
+        print("example_generator done")
 
 
 def article2ids(article_words, vocab):
-    """返回两个列表：将文章的词汇转换为id,包含oov词汇id; oov词汇"""
+    # 把文章变成ids，同时返回其oov词汇表
     ids = []
     oovs = []
     unk_id = vocab.word2id(UNKNOWN_TOKEN)
     for w in article_words:
         i = vocab.word2id(w)
-        if i == unk_id:  # If w is OOV
-            if w not in oovs:  # Add to list of OOVs
+        if i == unk_id:
+            if w not in oovs:
                 oovs.append(w)
-                oov_num = oovs.index(w)  # This is 0 for the first article OOV, 1 for the second article OOV...
-                ids.append(
-                    vocab.size() + oov_num)  # This is e.g. 50000 for the first article OOV, 50001 for the second...
+                # 在OOV词汇表中的位置
+                oov_num = oovs.index(w)
+                # OOV词的最终ID是词汇表长+OOV词汇表相对长位置ID
+                ids.append(vocab.size() + oov_num)
         else:
             ids.append(i)
     return ids, oovs
@@ -137,31 +112,37 @@ def abstract2ids(abstract_words, vocab, article_oovs):
     unk_id = vocab.word2id(UNKNOWN_TOKEN)
     for w in abstract_words:
         i = vocab.word2id(w)
-        if i == unk_id:  # If w is an OOV word
-            if w in article_oovs:  # If w is an in-article OOV
-                vocab_idx = vocab.size() + article_oovs.index(w)  # Map to its temporary article OOV number
+        if i == unk_id:
+            # 如果是OOV单词，用OOV单词的ID表示
+            if w in article_oovs:
+                vocab_idx = vocab.size() + article_oovs.index(w)
                 ids.append(vocab_idx)
-            else:  # If w is an out-of-article OOV
-                ids.append(unk_id)  # Map to the UNK token id
-        else:
+            else:  # 否则，还是UNK的ID
+                ids.append(unk_id)
+        else:  # 否则就是词汇表的词
             ids.append(i)
     return ids
 
 
 def outputids2words(id_list, vocab, article_oovs):
+    '''
+    :param id_list: 输入序号列，序号可能超出vocab大小，就往article_oovs去拿
+    :param vocab:
+    :param article_oovs:
+    :return: 返回真正的词
+    '''
     words = []
     for i in id_list:
         try:
-            w = vocab.id2word(i)  # might be [UNK]
-        except ValueError as e:  # w is OOV
-            assert article_oovs is not None, "Error: model produced a word ID that isn't in the vocabulary. This should not happen in baseline (no pointer-generator) mode"
+            w = vocab.id2word(i)  # 可能是 [UNK]词
+        except ValueError as e:  # w 是 OOV词
+            assert article_oovs is not None, "错误，需要有OOV词汇表"
+            # 拿到OOV词汇表的索引
             article_oov_idx = i - vocab.size()
             try:
                 w = article_oovs[article_oov_idx]
-            except ValueError as e:  # i doesn't correspond to an article oov
-                raise ValueError(
-                    'Error: model produced word ID %i which corresponds to article OOV %i but this example only has %i article OOVs' % (
-                    i, article_oov_idx, len(article_oovs)))
+            except ValueError as e:
+                raise ValueError('序号超出OOV词汇表范围')
         words.append(w)
     return words
 
@@ -177,7 +158,6 @@ def abstract2sents(abstract):
             cur = end_p + len(SENTENCE_END)
             sents.append(abstract[start_p + len(SENTENCE_START):end_p])
         except ValueError as e:
-            # no more sentences
             return sents
 
 
